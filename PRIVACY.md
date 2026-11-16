@@ -1,6 +1,6 @@
 # Privacy
 
-Multi WhatsApp runs entirely in your browser.
+Multi Account for WhatsApp Web runs entirely in your browser.
 
 **What it stores**, all in your Chrome profile on this device:
 
@@ -16,4 +16,6 @@ Multi WhatsApp runs entirely in your browser.
 
 **Removing data:** Removing an account in the extension deletes its saved session. Uninstalling the extension deletes the account list. Saved sessions inside web.whatsapp.com's storage stay until you remove them in the extension first or clear that site's data in Chrome (*Settings → Privacy and security → Site settings → web.whatsapp.com → Delete data*).
 
-Multi WhatsApp isn't affiliated with or endorsed by WhatsApp or Meta.
+Multi Account for WhatsApp Web is an independent project. It isn't affiliated with, endorsed by or sponsored by WhatsApp LLC or Meta Platforms, Inc. WhatsApp is a trademark of WhatsApp LLC.
+
+Questions: open an issue at https://github.com/mehulmpt/multi-whatsapp/issues.

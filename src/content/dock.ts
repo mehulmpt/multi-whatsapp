@@ -73,7 +73,7 @@ export function mountDock(): void {
       .join("");
 
     root.innerHTML = `
-      <div class="tab" title="Multi WhatsApp — switch account">
+      <div class="tab" title="Multi Account — switch WhatsApp account">
         <div class="grip" title="Drag to move"></div>
         ${active ? avatarHtml(active.name, active.color) : avatarHtml("?", "#8696a0")}
         <span class="count">${accounts.length}</span>

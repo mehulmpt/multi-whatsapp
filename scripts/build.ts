@@ -14,13 +14,13 @@ const icons = Object.fromEntries(ICON_SIZES.map((s) => [String(s), `icons/icon-$
 
 const manifest = {
   manifest_version: 3,
-  name: "Multi WhatsApp",
-  short_name: "Multi WA",
+  name: "Multi Account for WhatsApp Web",
+  short_name: "Multi Account",
   version: pkg.version,
   description: pkg.description,
   minimum_chrome_version: "120",
   icons,
-  action: { default_popup: "popup.html", default_icon: icons, default_title: "Multi WhatsApp" },
+  action: { default_popup: "popup.html", default_icon: icons, default_title: "Multi Account for WhatsApp Web" },
   options_ui: { page: "options.html", open_in_tab: true },
   background: { service_worker: "background.js", type: "module" },
   // Sessions live in one shared vault; an incognito copy would fight over it.
@@ -100,5 +100,5 @@ if (watch) {
   console.log("👀 watching… reload the extension at chrome://extensions after changes");
 } else {
   await Promise.all([esbuild.build(options), esbuild.build(cssOptions)]);
-  console.log(`✅ built Multi WhatsApp v${pkg.version} → dist/`);
+  console.log(`✅ built Multi Account for WhatsApp Web v${pkg.version} → dist/`);
 }

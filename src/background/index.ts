@@ -226,7 +226,7 @@ async function refreshBadge(): Promise<void> {
     await chrome.action.setBadgeText({ text: accounts.length ? "?" : "" });
     await chrome.action.setBadgeBackgroundColor({ color: "#8696a0" });
   }
-  await chrome.action.setTitle({ title: active ? `Multi WhatsApp — ${active.name}` : "Multi WhatsApp" });
+  await chrome.action.setTitle({ title: active ? `Multi Account — ${active.name}` : "Multi Account for WhatsApp Web" });
 }
 
 // ---------------------------------------------------------------------------

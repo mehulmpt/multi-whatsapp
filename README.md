@@ -1,4 +1,4 @@
-# Multi WhatsApp
+# Multi Account for WhatsApp Web
 
 A Chrome extension that keeps several WhatsApp Web accounts in one browser profile and switches between them in a click. You don't need a second Chrome profile, and you don't need to log out and scan a QR code each time.
 
@@ -10,7 +10,7 @@ A Chrome extension that keeps several WhatsApp Web accounts in one browser profi
 2. Open `chrome://extensions` in Chrome.
 3. Turn on **Developer mode** in the upper-right corner.
 4. Click **Load unpacked** and select the `dist/` folder (the one containing `manifest.json`).
-5. Pin **Multi WhatsApp** from Chrome's puzzle-piece Extensions menu.
+5. Pin **Multi Account for WhatsApp Web** from Chrome's puzzle-piece Extensions menu.
 6. Open (or reload) [web.whatsapp.com](https://web.whatsapp.com). If you're already logged in, that session becomes **Account 1**.
 
 Keep the folder in place while the extension is installed. After rebuilding, click the extension's **Reload** button in `chrome://extensions`, then reload the WhatsApp tab.
@@ -77,6 +77,10 @@ The extension never reads, sends or indexes your messages. It reads one `localSt
 - **Disk space:** each saved account takes about as much as one WhatsApp Web session. The settings page shows the total.
 - **Only one account runs at a time.** Inactive accounts don't receive messages until you switch to them, the same as a closed WhatsApp Web tab. Your phone still gets everything.
 - The extension depends on how WhatsApp Web stores its session. It treats that storage generically and copies whatever databases exist, but a major WhatsApp change could still break it.
+
+## Disclaimer
+
+This is an independent project. It isn't affiliated with, endorsed by or sponsored by WhatsApp LLC or Meta Platforms, Inc. WhatsApp is a trademark of WhatsApp LLC.
 
 ## Development
 
