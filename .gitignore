@@ -4,3 +4,5 @@ release/
 *.log
 .DS_Store
 tests/e2e/last-run.json
+store/captures/
+store/src/icon.html

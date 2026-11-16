@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css">
+<style>
+.grid { position:absolute; left:72px; right:72px; top:330px; display:grid; grid-template-columns:repeat(4,1fr); gap:22px; }
+.tile { background: rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.14); border-radius:20px; padding:28px 24px; backdrop-filter: blur(8px); }
+.tile .ic { font-size:34px; margin-bottom:16px; }
+.tile h4 { font-size:21px; margin-bottom:8px; }
+.tile p { font-size:16px; line-height:1.45; color:rgba(255,255,255,.78); }
+.foot { position:absolute; left:72px; bottom:56px; font-size:15px; color:rgba(255,255,255,.6); }
+</style></head>
+<body>
+  <div class="copy" style="left:72px;top:96px;width:900px">
+    <div class="eyebrow">Private by design</div>
+    <h1>Your chats never leave <em>your browser</em></h1>
+    <p class="lead">No servers, no accounts, no tracking. Just your sessions, on your device.</p>
+  </div>
+  <div class="grid">
+    <div class="tile"><div class="ic">🔒</div><h4>Stays on device</h4><p>Sessions are stored by Chrome in WhatsApp Web's own storage.</p></div>
+    <div class="tile"><div class="ic">🚫</div><h4>No data collected</h4><p>No network requests, analytics or third-party code.</p></div>
+    <div class="tile"><div class="ic">👀</div><h4>Never reads messages</h4><p>It only swaps sessions. It doesn't read your chats.</p></div>
+    <div class="tile"><div class="ic">🧩</div><h4>Open source</h4><p>Every line is on GitHub for anyone to review.</p></div>
+  </div>
+  <div class="foot">Independent project · not affiliated with WhatsApp LLC or Meta Platforms, Inc.</div>
+</body></html>

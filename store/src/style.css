@@ -1,0 +1,65 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #fff;
+  background: #0b3d2e url(../art/backdrop.png) center / cover no-repeat;
+  -webkit-font-smoothing: antialiased;
+}
+body.hero { background-image: url(../art/hero.png); }
+
+.copy { position: absolute; }
+.eyebrow { font-size: 15px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #9ff5c8; margin-bottom: 14px; }
+h1 { font-size: 52px; line-height: 1.06; font-weight: 800; letter-spacing: -.025em; }
+h1 em { font-style: normal; color: #6cf0a5; }
+.lead { font-size: 21px; line-height: 1.45; color: rgba(255, 255, 255, .82); margin-top: 16px; font-weight: 450; }
+
+.shadow { box-shadow: 0 30px 80px rgba(0, 20, 12, .45), 0 6px 18px rgba(0, 20, 12, .25); }
+.card-img { border-radius: 18px; display: block; }
+
+/* Bullets with check marks */
+.points { list-style: none; margin-top: 28px; display: grid; gap: 16px; }
+.points li { display: flex; gap: 14px; align-items: flex-start; font-size: 19px; line-height: 1.4; color: rgba(255,255,255,.92); }
+.points li::before {
+  content: "✓"; flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(108, 240, 165, .18); color: #6cf0a5; font-weight: 800; font-size: 15px; margin-top: 1px;
+}
+.points b { color: #fff; }
+
+/* Callout pills */
+.pill {
+  position: absolute; background: rgba(255,255,255,.96); color: #0b2b21; font-weight: 650; font-size: 16px;
+  padding: 10px 16px; border-radius: 999px; box-shadow: 0 10px 30px rgba(0,20,12,.35); white-space: nowrap;
+  display: flex; align-items: center; gap: 8px;
+}
+.pill kbd { font: inherit; font-size: 14px; border: 1px solid #d5dbdf; border-bottom-width: 2px; border-radius: 6px; padding: 0 6px; background: #f6f8f9; }
+.pill .dot { width: 10px; height: 10px; border-radius: 50%; background: #25d366; }
+
+/* Browser frame + generic messenger mock (fictional data, no third-party logos) */
+.browser { position: absolute; border-radius: 14px; overflow: hidden; background: #fff; }
+.browser .bar { height: 44px; background: #eef1f3; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid #dde2e5; }
+.browser .bar i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; display: block; }
+.browser .bar i:nth-child(2) { background: #febc2e; } .browser .bar i:nth-child(3) { background: #28c840; }
+.browser .url { margin-left: 18px; flex: 1; height: 28px; border-radius: 8px; background: #fff; color: #54656f; font-size: 14px; display: flex; align-items: center; padding: 0 12px; gap: 8px; }
+.browser .ext { width: 26px; height: 26px; border-radius: 6px; background: url(../../dist/icons/icon-32.png) center / 22px no-repeat; }
+.app { display: grid; grid-template-columns: 280px 1fr; height: calc(100% - 44px); color: #111b21; position: relative; }
+.side { border-right: 1px solid #e9edef; background: #fff; }
+.side h3 { font-size: 20px; padding: 18px 18px 10px; }
+.search { margin: 0 14px 10px; height: 34px; border-radius: 8px; background: #f0f2f5; }
+.chat { display: flex; gap: 12px; padding: 10px 16px; align-items: center; }
+.chat.sel { background: #f0f2f5; }
+.chat .av, .msghead .av { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 16px; flex: none; }
+.chat .t { flex: 1; min-width: 0; }
+.chat .n { font-weight: 600; font-size: 15px; }
+.chat .m { color: #667781; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat .time { font-size: 12px; color: #667781; align-self: flex-start; margin-top: 4px; }
+.badge { background: #25d366; color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 1px 7px; margin-top: 4px; }
+.conv { background: #efeae2; display: flex; flex-direction: column; }
+.msghead { height: 62px; background: #f0f2f5; display: flex; align-items: center; gap: 12px; padding: 0 18px; font-weight: 600; }
+.msghead .av { width: 40px; height: 40px; }
+.msgs { flex: 1; padding: 22px 34px; display: flex; flex-direction: column; gap: 8px; }
+.b { max-width: 58%; padding: 8px 12px 6px; border-radius: 10px; font-size: 15px; line-height: 1.35; background: #fff; align-self: flex-start; box-shadow: 0 1px .5px rgba(11,20,26,.13); }
+.b.me { background: #d9fdd3; align-self: flex-end; }
+.b small { display: block; text-align: right; font-size: 11px; color: #667781; margin-top: 2px; }
+.composer { height: 62px; background: #f0f2f5; display: flex; align-items: center; padding: 0 18px; }
+.composer div { flex: 1; height: 40px; border-radius: 10px; background: #fff; }
