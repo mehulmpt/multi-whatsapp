@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Multi WhatsApp — Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <header class="page-head">
+        <img src="icons/icon-48.png" alt="" width="40" height="40" />
+        <div>
+          <h1>Multi WhatsApp</h1>
+          <p class="muted" id="version"></p>
+        </div>
+      </header>
+
+      <section>
+        <div class="section-head">
+          <h2>Accounts</h2>
+          <button type="button" class="link" id="open">Open WhatsApp Web ↗</button>
+        </div>
+        <p class="muted">Click an account to switch to it. Drag to reorder. Double-click or use ✎ to rename, change the colour or remove an account.</p>
+        <div id="banner" hidden></div>
+        <ul id="list" class="card" aria-label="Accounts"></ul>
+        <button type="button" id="add" class="primary narrow">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z"/></svg>
+          Add account
+        </button>
+      </section>
+
+      <section>
+        <h2>In-page switcher</h2>
+        <div class="card setting">
+          <label class="switch-row">
+            <span>
+              <strong>Show the account tab on WhatsApp Web</strong>
+              <span class="muted block">A small tab on the right edge of WhatsApp Web. Hover it to switch accounts.</span>
+            </span>
+            <input type="checkbox" id="dock" role="switch" />
+          </label>
+          <div class="row-between">
+            <span class="muted">Moved it somewhere awkward? Drag its grip, or reset it.</span>
+            <button type="button" class="btn" id="reset-dock">Reset position</button>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-head">
+          <h2>Keyboard shortcuts</h2>
+          <button type="button" class="link" id="shortcuts">Change shortcuts ↗</button>
+        </div>
+        <ul class="card shortcuts" id="commands"></ul>
+        <p class="muted">In the popup and in the open in-page switcher, <kbd>1</kbd>–<kbd>9</kbd> jump straight to that account.</p>
+      </section>
+
+      <section>
+        <h2>Storage</h2>
+        <div class="card setting">
+          <div class="row-between">
+            <span><strong id="usage">—</strong> <span class="muted">used by WhatsApp Web and saved accounts in this browser</span></span>
+          </div>
+          <p class="muted" id="persist"></p>
+        </div>
+      </section>
+
+      <section class="help">
+        <h2>Good to know</h2>
+        <p>Switching saves the open WhatsApp session in your browser, then loads the other account's saved session and reloads WhatsApp. A switch usually takes a second or two. Accounts with a lot of history take longer.</p>
+        <p>Use one WhatsApp tab. Other WhatsApp tabs are closed during a switch, because they would block it.</p>
+        <p>Removing an account deletes its saved session from this browser only. To unlink it completely, also remove it on your phone under <em>WhatsApp → Linked devices</em>.</p>
+        <p>Clearing site data or cookies for web.whatsapp.com deletes all saved sessions. You would then need to link each account again with its QR code.</p>
+        <p>Everything stays on this device. The extension makes no network requests, has no analytics and never reads your messages.</p>
+      </section>
+    </main>
+    <div id="toast" role="status" hidden></div>
+    <script src="options.js"></script>
+  </body>
+</html>

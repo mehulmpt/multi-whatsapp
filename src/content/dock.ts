@@ -1,4 +1,5 @@
-import { contrastText, escapeHtml, formatPhone, getState, initials, onStateChange, send } from "../shared/common";
+import { escapeHtml, formatPhone, getPrefs, getState, onStateChange, send } from "../shared/common";
+import { avatarHtml, paintAvatars, sheet } from "../shared/dom";
 import type { State } from "../shared/types";
 
 const CSS = `
@@ -39,18 +40,13 @@ const CSS = `
 .busy { position:absolute; inset:0; border-radius:14px; background:var(--bg); display:grid; place-items:center; color:var(--muted); }
 `;
 
-function avatarHtml(name: string, color: string): string {
-  return `<span class="av" style="background:${color};color:${contrastText(color)}">${escapeHtml(initials(name))}</span>`;
-}
-
 export function mountDock(): void {
   const host = document.createElement("multi-whatsapp-dock");
-  const shadow = host.attachShadow({ mode: "closed" });
-  const style = document.createElement("style");
-  style.textContent = CSS;
+  const shadow = host.attachShadow({ mode: "open" });
+  shadow.adoptedStyleSheets = [sheet(CSS)];
   const root = document.createElement("div");
   root.className = "root";
-  shadow.append(style, root);
+  shadow.append(root);
   document.documentElement.append(host);
 
   let state: State | null = null;
@@ -86,8 +82,9 @@ export function mountDock(): void {
         ${active ? "" : `<div class="warn">This session isn't saved to any account yet.<br><button data-act="adopt">Save as new account</button></div>`}
         <div class="list">${items}</div>
         <div class="sep"></div>
-        <button class="item add" data-act="add">${'<span class="av">+</span>'}<span class="meta"><div class="name">Add account</div><div class="sub">Link another number</div></span></button>
+        <button class="item add" data-act="add"><span class="av">+</span><span class="meta"><div class="name">Add account</div><div class="sub">Link another number</div></span></button>
       </div>`;
+    paintAvatars(root);
   };
 
   const setBusy = (label: string) => {
@@ -182,10 +179,10 @@ export function mountDock(): void {
 
   // --- state --------------------------------------------------------------
   const load = async () => {
-    const [s, prefs] = await Promise.all([getState(), chrome.storage.local.get(["dockHidden", "dockTop"])]);
+    const [s, prefs] = await Promise.all([getState(), getPrefs()]);
     state = s;
-    hidden = prefs.dockHidden === true;
-    topPct = typeof prefs.dockTop === "number" ? prefs.dockTop : 50;
+    hidden = prefs.dockHidden;
+    topPct = prefs.dockTop;
     render();
   };
   void load();

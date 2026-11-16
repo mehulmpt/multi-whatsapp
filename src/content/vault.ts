@@ -15,7 +15,7 @@ const PREFIX = "mwa:";
 const META_DB = "mwa-vault";
 const META_STORE = "slots";
 const CHUNK = 500;
-const BLOCKED_TIMEOUT_MS = 10_000;
+const BLOCKED_TIMEOUT_MS = 20_000;
 
 interface IndexSchema {
   name: string;
@@ -77,13 +77,27 @@ function open(name: string, version?: number, upgrade?: (db: IDBDatabase) => voi
   });
 }
 
+/**
+ * Called once when a live database delete is blocked by another connection
+ * (e.g. WhatsApp's service worker). Should try to make that holder go away.
+ */
+let onBlocked: (() => Promise<void>) | null = null;
+export function setBlockedHandler(fn: () => Promise<void>): void {
+  onBlocked = fn;
+}
+
 function deleteDb(name: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const r = indexedDB.deleteDatabase(name);
+    // A blocked delete stays queued and completes by itself once the other
+    // connection closes, so we keep waiting rather than issuing a new one.
     const timer = setTimeout(
-      () => reject(new Error(`Deleting "${name}" is blocked — close other WhatsApp tabs/windows and retry.`)),
+      () => reject(new Error(`"${name}" is still in use by another WhatsApp tab or window. Close it and retry.`)),
       BLOCKED_TIMEOUT_MS,
     );
+    r.onblocked = () => {
+      void onBlocked?.().catch((e: unknown) => console.warn("[multi-whatsapp] unblock failed", e));
+    };
     r.onsuccess = () => {
       clearTimeout(timer);
       resolve();

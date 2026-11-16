@@ -8,7 +8,7 @@ const OP_STALE_MS = 90_000;
 // State helpers
 // ---------------------------------------------------------------------------
 
-async function save(patch: Partial<State>): Promise<void> {
+async function save(patch: Partial<State> | Record<string, unknown>): Promise<void> {
   await chrome.storage.local.set(patch);
 }
 
@@ -51,9 +51,9 @@ async function focusTab(tab: chrome.tabs.Tab): Promise<void> {
  * hold IndexedDB connections open which would block the database swap
  * (WhatsApp only allows one active tab anyway).
  */
-async function primaryWaTab(): Promise<chrome.tabs.Tab> {
+async function primaryWaTab(): Promise<chrome.tabs.Tab | null> {
   const tabs = await waTabs();
-  if (tabs.length === 0) return chrome.tabs.create({ url: "about:blank", active: true });
+  if (tabs.length === 0) return null;
   const [lastFocused] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   const primary = tabs.find((t) => t.id === lastFocused?.id) ?? tabs.find((t) => t.active) ?? tabs[0]!;
   const extra = tabs.filter((t) => t.id !== primary.id).map((t) => t.id!);
@@ -68,8 +68,13 @@ async function dispatch(op: Omit<PendingOp, "id" | "createdAt">): Promise<void> 
   }
   const pendingOp: PendingOp = { ...op, id: uid(), createdAt: Date.now() };
   await save({ pendingOp });
+  const url = `${WA_URL}?${OP_PARAM}=${pendingOp.id}`;
   const tab = await primaryWaTab();
-  await chrome.tabs.update(tab.id!, { url: `${WA_URL}?${OP_PARAM}=${pendingOp.id}`, active: true });
+  if (!tab) {
+    await chrome.tabs.create({ url, active: true });
+    return;
+  }
+  await chrome.tabs.update(tab.id!, { url, active: true });
   await focusTab(tab);
 }
 
@@ -144,7 +149,11 @@ async function updateAccount(id: string, patch: { name?: string; color?: string 
   await save({
     accounts: accounts.map((a) =>
       a.id === id
-        ? { ...a, ...(patch.name?.trim() ? { name: patch.name.trim() } : {}), ...(patch.color ? { color: patch.color } : {}) }
+        ? {
+            ...a,
+            ...(patch.name?.trim() ? { name: patch.name.trim().slice(0, 40) } : {}),
+            ...(patch.color && (COLORS as readonly string[]).includes(patch.color) ? { color: patch.color } : {}),
+          }
         : a,
     ),
   });
@@ -181,6 +190,23 @@ async function opDone(opId: string, ok: boolean): Promise<void> {
   // On failure keep the op around so the switch page can offer a retry.
   if (ok) await save({ pendingOp: null });
   else await save({ pendingOp: { ...pendingOp, createdAt: 0 } });
+}
+
+/**
+ * A live WhatsApp database can't be deleted while something still holds it
+ * open and ignores `versionchange` – in practice WhatsApp's service worker.
+ * Unregistering it terminates the worker, which releases the connection; the
+ * queued delete then completes. WhatsApp re-registers its worker on next load.
+ */
+let lastUnblock = 0;
+async function unblockStorage(): Promise<void> {
+  if (Date.now() - lastUnblock < 3000) return;
+  lastUnblock = Date.now();
+  await chrome.browsingData.remove({ origins: [WA_ORIGIN] }, { serviceWorkers: true });
+}
+
+async function recordStorageUsage(bytes: number, persisted: boolean): Promise<void> {
+  await save({ storageUsage: { bytes, persisted, at: Date.now() } });
 }
 
 // ---------------------------------------------------------------------------
@@ -254,6 +280,10 @@ async function handle(req: Request): Promise<unknown> {
       return opProgress(req.opId, req.activeId);
     case "op-done":
       return opDone(req.opId, req.ok);
+    case "unblock-storage":
+      return unblockStorage();
+    case "storage-usage":
+      return recordStorageUsage(req.bytes, req.persisted);
   }
 }
 

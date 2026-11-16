@@ -1,6 +1,7 @@
-import { WA_URL, contrastText, escapeHtml, getState, initials, send } from "../shared/common";
+import { WA_URL, escapeHtml, getState, send } from "../shared/common";
+import { avatarHtml, paintAvatars, sheet } from "../shared/dom";
 import type { Account } from "../shared/types";
-import { clearLive, deleteSlot, restore, saveLive } from "./vault";
+import { clearLive, deleteSlot, restore, saveLive, setBlockedHandler } from "./vault";
 
 const CSS = `
 :root { color-scheme: light dark; --bg:#f0f2f5; --card:#ffffff; --fg:#111b21; --muted:#667781; --line:#e9edef; --accent:#00a884; --danger:#ea0038; }
@@ -24,12 +25,12 @@ h1 { font-size:18px; font-weight:600; margin:0 0 6px; }
 button { font:inherit; font-weight:600; border:0; border-radius:999px; padding:9px 18px; cursor:pointer; }
 .primary { background:var(--accent); color:#fff; }
 .ghost { background:transparent; color:var(--accent); box-shadow: inset 0 0 0 1px var(--line); }
+.av.blank { background:#8696a0; color:#fff; }
 .done .arrow::after { animation:none; width:100%; }
 `;
 
 function avatar(a: Account | undefined, cls: string): string {
-  if (!a) return `<div class="av ${cls}" style="background:#8696a0;color:#fff">+</div>`;
-  return `<div class="av ${cls}" style="background:${a.color};color:${contrastText(a.color)}">${escapeHtml(initials(a.name))}</div>`;
+  return a ? avatarHtml(a.name, a.color, `av ${cls}`) : `<span class="av ${cls} blank">+</span>`;
 }
 
 function render(from: Account | undefined, to: Account | undefined, title: string): {
@@ -46,10 +47,9 @@ function render(from: Account | undefined, to: Account | undefined, title: strin
   <div class="error" hidden></div>
   <div class="actions" hidden><button class="primary" data-act="retry">Retry</button><button class="ghost" data-act="back">Back to WhatsApp</button></div>
 </div></body>`;
-  const style = document.createElement("style");
-  style.textContent = CSS;
-  html.querySelector("head")!.append(style);
   document.append(html);
+  document.adoptedStyleSheets = [sheet(CSS)];
+  paintAvatars(html);
 
   const $ = <T extends Element>(s: string) => html.querySelector<T>(s)!;
   return {
@@ -85,7 +85,16 @@ export async function runOpPage(opId: string): Promise<void> {
   const title = !isSwitch ? "Cleaning up…" : to ? `Switching to ${to.name}` : "Signing out…";
   const ui = render(from, to, title);
 
+  setBlockedHandler(async () => {
+    ui.status("Waiting for WhatsApp to release its storage…");
+    await send({ type: "unblock-storage" });
+  });
+
   try {
+    // Ask Chrome not to evict this origin's storage under disk pressure:
+    // it now holds every saved account, not just a re-downloadable cache.
+    const persisted = await navigator.storage.persist().catch(() => false);
+
     // Re-read state on every attempt: a retry must not re-save a live session
     // that has already been saved and cleared (activeId is null by then).
     let { activeId } = await getState();
@@ -108,6 +117,8 @@ export async function runOpPage(opId: string): Promise<void> {
       ui.status("Removing saved session…");
       await deleteSlot(id);
     }
+    const { usage = 0 } = await navigator.storage.estimate().catch(() => ({ usage: 0 }));
+    await send({ type: "storage-usage", bytes: usage, persisted }).catch(() => undefined);
     await send({ type: "op-done", opId, ok: true });
     ui.status("Opening WhatsApp…");
     location.replace(WA_URL);

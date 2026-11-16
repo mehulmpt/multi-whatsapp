@@ -1,4 +1,4 @@
-import type { Account, Request, Response, State } from "./types";
+import type { Account, Prefs, Request, Response, State } from "./types";
 
 export const WA_ORIGIN = "https://web.whatsapp.com";
 export const WA_URL = `${WA_ORIGIN}/`;
@@ -15,7 +15,36 @@ export const COLORS = [
   "#EF4444", // red
 ] as const;
 
-export const DEFAULT_STATE: State = { accounts: [], activeId: null, pendingOp: null };
+export const DEFAULT_PREFS: Prefs = { dockHidden: false, dockTop: 50 };
+
+export async function getPrefs(): Promise<Prefs> {
+  const raw = await chrome.storage.local.get(["dockHidden", "dockTop", "storageUsage"]);
+  return {
+    dockHidden: raw.dockHidden === true,
+    dockTop: typeof raw.dockTop === "number" ? raw.dockTop : DEFAULT_PREFS.dockTop,
+    storageUsage: raw.storageUsage as Prefs["storageUsage"],
+  };
+}
+
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  const units = ["KB", "MB", "GB"];
+  let v = n / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
+}
+
+export function ago(ts: number, now = Date.now()): string {
+  const s = (now - ts) / 1000;
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
 
 export async function getState(): Promise<State> {
   const raw = await chrome.storage.local.get(["accounts", "activeId", "pendingOp"]);
@@ -52,7 +81,8 @@ export function initials(name: string): string {
   const first = words[0] ?? "";
   const second = words[1];
   if (/^\+?\d/.test(first)) return first.replace(/\D/g, "").slice(-2);
-  return ((first[0] ?? "") + (second?.[0] ?? first[1] ?? "")).toUpperCase();
+  // "Account 2" → "A2", "Work Phone" → "WP", "Work" → "W"
+  return ((first[0] ?? "") + (second?.[0] ?? "")).toUpperCase();
 }
 
 export function formatPhone(phone?: string): string {

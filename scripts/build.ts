@@ -21,8 +21,12 @@ const manifest = {
   minimum_chrome_version: "120",
   icons,
   action: { default_popup: "popup.html", default_icon: icons, default_title: "Multi WhatsApp" },
+  options_ui: { page: "options.html", open_in_tab: true },
   background: { service_worker: "background.js", type: "module" },
-  permissions: ["storage"],
+  // Sessions live in one shared vault; an incognito copy would fight over it.
+  incognito: "not_allowed",
+  // browsingData: stop WhatsApp's service worker if it holds a database open mid-switch.
+  permissions: ["storage", "browsingData"],
   host_permissions: ["https://web.whatsapp.com/*"],
   content_scripts: [
     {
@@ -53,6 +57,7 @@ const options: esbuild.BuildOptions = {
     background: join(src, "background/index.ts"),
     content: join(src, "content/index.ts"),
     popup: join(src, "popup/popup.ts"),
+    options: join(src, "options/options.ts"),
   },
   outdir: dist,
   bundle: true,
@@ -69,9 +74,18 @@ async function writeStatic(): Promise<void> {
   await mkdir(join(dist, "icons"), { recursive: true });
   await writeFile(join(dist, "manifest.json"), JSON.stringify(manifest, null, 2));
   await cp(join(src, "popup/popup.html"), join(dist, "popup.html"));
-  await cp(join(src, "popup/popup.css"), join(dist, "popup.css"));
+  await cp(join(src, "options/options.html"), join(dist, "options.html"));
   await Promise.all(ICON_SIZES.map((s) => writeFile(join(dist, `icons/icon-${s}.png`), renderIcon(s))));
 }
+
+const cssOptions: esbuild.BuildOptions = {
+  entryPoints: { popup: join(src, "popup/popup.css"), options: join(src, "options/options.css") },
+  outdir: dist,
+  bundle: true, // inlines @import "../ui/base.css"
+  minify: !watch,
+  target: "chrome120",
+  logLevel: "info",
+};
 
 await rm(dist, { recursive: true, force: true });
 await writeStatic();
@@ -81,9 +95,10 @@ if (watch) {
     ...options,
     plugins: [{ name: "static", setup: (b) => b.onEnd(() => void writeStatic()) }],
   });
-  await ctx.watch();
+  const cssCtx = await esbuild.context(cssOptions);
+  await Promise.all([ctx.watch(), cssCtx.watch()]);
   console.log("👀 watching… reload the extension at chrome://extensions after changes");
 } else {
-  await esbuild.build(options);
+  await Promise.all([esbuild.build(options), esbuild.build(cssOptions)]);
   console.log(`✅ built Multi WhatsApp v${pkg.version} → dist/`);
 }

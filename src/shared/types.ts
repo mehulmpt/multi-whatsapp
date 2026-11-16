@@ -45,6 +45,17 @@ export type Request =
   | { type: "open-whatsapp" }
   | { type: "profile"; phone: string }
   | { type: "op-progress"; opId: string; activeId: string | null }
-  | { type: "op-done"; opId: string; ok: boolean; error?: string };
+  | { type: "op-done"; opId: string; ok: boolean; error?: string }
+  | { type: "unblock-storage" }
+  | { type: "storage-usage"; bytes: number; persisted: boolean };
+
+/** Device-local preferences and diagnostics (chrome.storage.local). */
+export interface Prefs {
+  dockHidden: boolean;
+  /** Vertical position of the in-page switcher, % of viewport height. */
+  dockTop: number;
+  /** Total bytes WhatsApp Web + saved sessions use in this browser. */
+  storageUsage?: { bytes: number; persisted: boolean; at: number };
+}
 
 export type Response<T = unknown> = { ok: true; data: T } | { ok: false; error: string };
