@@ -7,6 +7,7 @@ const CSS = `
 :root { color-scheme: light dark; --bg:#f0f2f5; --card:#ffffff; --fg:#111b21; --muted:#667781; --line:#e9edef; --accent:#00a884; --danger:#ea0038; }
 @media (prefers-color-scheme: dark) { :root { --bg:#0b141a; --card:#111b21; --fg:#e9edef; --muted:#8696a0; --line:#222d34; --danger:#f15c6d; } }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin:0; height:100%; background:var(--bg); color:var(--fg);
   font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
 body { display:grid; place-items:center; padding:16px; }

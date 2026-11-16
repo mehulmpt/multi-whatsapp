@@ -442,6 +442,8 @@ try {
     await p.waitForSelector(".card", { timeout: 10_000 }).catch(() => undefined);
     const bg = await p.$eval(".card", (el) => getComputedStyle(el).borderRadius).catch(() => "");
     eq(bg, "20px", "switch page stylesheet applied");
+    const actions = await p.$eval(".actions", (el) => getComputedStyle(el).display).catch(() => "gone");
+    assert(actions === "none" || actions === "gone", `Retry/Back buttons must stay hidden while switching (display: ${actions})`);
     await waReady(p);
     page = p;
   });

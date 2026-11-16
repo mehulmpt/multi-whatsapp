@@ -5,6 +5,7 @@ import type { State } from "../shared/types";
 const CSS = `
 :host { all: initial; }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 .root { --bg:#ffffff; --fg:#111b21; --muted:#667781; --line:#e9edef; --hover:#f5f6f6; --accent:#00a884;
   position: fixed; right: 0; z-index: 2147483000; transform: translateY(-50%);
   font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--fg); }
