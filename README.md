@@ -42,8 +42,12 @@ A switch takes well under a second for a typical session. Accounts with a lot of
 WhatsApp Web keeps the whole session (encryption keys, chats, settings) in IndexedDB and `localStorage` on `https://web.whatsapp.com`. A switch works like this:
 
 1. The extension sends the WhatsApp tab to `https://web.whatsapp.com/?mwa_op=…`. Its content script runs at `document_start` and calls `window.stop()`, so WhatsApp's own code never starts and nothing holds the databases open.
-2. It copies every live database and `localStorage` into a vault in the same origin: IndexedDB databases named `mwa:<account-id>:<db>`, plus a `mwa-vault` index. Schemas, versions, indexes, key paths and auto-increment stores are reproduced exactly.
+2. It saves every live database and `localStorage` into a vault in the same origin: IndexedDB databases named `mwa:<account-id>:<db>`, plus a `mwa-vault` index. Schemas, versions, indexes, key paths and auto-increment stores are reproduced exactly.
 3. It clears the live storage, copies the target account's vault back in, and reloads WhatsApp.
+
+**Speed.** Index updates dominate the cost. On a real account, WhatsApp's `message` store has 20 indexes, and writing a record costs about 10× more than reading it. So the save step is **incremental**: the extension reads the live database and the previous snapshot side by side in key order and writes only the records that were added, changed or deleted. Typically that's a few hundred, not about 80,000. The equality check is conservative: anything it can't prove identical (Blob, CryptoKey, Map) is rewritten. A wrong answer can therefore only cost speed, never correctness. If a database's schema or version changed, the save falls back to a full copy.
+
+Restoring has to write the target account in full, because WhatsApp's database names are fixed. Stores copy concurrently, reads overlap with writes, and records are read with `getAllRecords()`. Chunks are written with relaxed durability, followed by one strict commit per database before anything is deleted. The settings page shows how long the last switch took.
 
 Everything stays inside WhatsApp's own origin. That isn't optional: WhatsApp holds *non-extractable* `CryptoKey`s that can be structured-cloned between databases of the same origin but can never be exported anywhere else.
 
@@ -85,6 +89,7 @@ bun run dev         # watch mode, unminified + inline sourcemaps
 bun run typecheck   # tsc --noEmit (strict)
 bun test tests/unit # unit tests
 bun run test:e2e    # real extension in Chrome for Testing against a fake web.whatsapp.com
+bun run bench       # switch-speed benchmark: ~82k-record accounts shaped like a real one
 bun run check       # all of the above
 bun run zip         # → release/multi-whatsapp-<version>.zip
 ```
@@ -106,7 +111,8 @@ Run it with `HEADFUL=1` to watch. See [VERIFICATION.md](VERIFICATION.md) for the
 src/
   background/index.ts   service worker: account state, switch dispatch, badge, shortcuts
   content/index.ts      entry: switch page (?mwa_op=…) or in-page switcher
-  content/vault.ts      IndexedDB + localStorage snapshot / restore
+  content/vault.ts      IndexedDB + localStorage snapshot (incremental) / restore
+  content/same.ts       conservative structural equality used by the incremental save
   content/op-page.ts    the "Switching…" page that runs a vault operation
   content/dock.ts       in-page account switcher (shadow DOM)
   ui/account-list.ts    account list shared by popup + settings (edit, reorder, keys)

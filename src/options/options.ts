@@ -43,6 +43,18 @@ async function renderPrefs(): Promise<void> {
   $("#persist").textContent = u
     ? `${u.persisted ? "Chrome has marked this storage as persistent, so it won't clear it to free up disk space." : "Chrome hasn't granted persistent storage yet. If disk space runs very low, it may clear site data."} Measured ${ago(u.at)}.`
     : "Measured during the next account switch.";
+
+  const ls = prefs.lastSwitch;
+  const el = $("#last-switch");
+  el.hidden = !ls;
+  if (ls) {
+    const n = new Intl.NumberFormat();
+    const sec = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
+    el.textContent =
+      `Last switch (${ago(ls.at)}): ${sec(ls.totalMs)} to swap sessions` +
+      ` (saved ${n.format(ls.savedRecords)} records in ${sec(ls.saveMs)}, restored ${n.format(ls.restoredRecords)} in ${sec(ls.restoreMs)}),` +
+      " then WhatsApp's own start-up.";
+  }
 }
 
 async function renderCommands(): Promise<void> {
@@ -65,6 +77,6 @@ async function renderCommands(): Promise<void> {
 void renderPrefs();
 void renderCommands();
 chrome.storage.onChanged.addListener((c, area) => {
-  if (area === "local" && ("dockHidden" in c || "dockTop" in c || "storageUsage" in c)) void renderPrefs();
+  if (area === "local" && ("dockHidden" in c || "dockTop" in c || "storageUsage" in c || "lastSwitch" in c)) void renderPrefs();
 });
 window.addEventListener("focus", () => void renderCommands());

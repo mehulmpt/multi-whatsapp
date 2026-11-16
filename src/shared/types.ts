@@ -47,7 +47,19 @@ export type Request =
   | { type: "op-progress"; opId: string; activeId: string | null }
   | { type: "op-done"; opId: string; ok: boolean; error?: string }
   | { type: "unblock-storage" }
-  | { type: "storage-usage"; bytes: number; persisted: boolean };
+  | { type: "storage-usage"; bytes: number; persisted: boolean }
+  | { type: "switch-stats"; stats: SwitchStats };
+
+/** Timing of the most recent switch (excludes WhatsApp's own start-up). */
+export interface SwitchStats {
+  at: number;
+  totalMs: number;
+  saveMs: number;
+  clearMs: number;
+  restoreMs: number;
+  savedRecords: number;
+  restoredRecords: number;
+}
 
 /** Device-local preferences and diagnostics (chrome.storage.local). */
 export interface Prefs {
@@ -56,6 +68,7 @@ export interface Prefs {
   dockTop: number;
   /** Total bytes WhatsApp Web + saved sessions use in this browser. */
   storageUsage?: { bytes: number; persisted: boolean; at: number };
+  lastSwitch?: SwitchStats;
 }
 
 export type Response<T = unknown> = { ok: true; data: T } | { ok: false; error: string };

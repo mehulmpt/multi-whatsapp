@@ -18,11 +18,12 @@ export const COLORS = [
 export const DEFAULT_PREFS: Prefs = { dockHidden: false, dockTop: 50 };
 
 export async function getPrefs(): Promise<Prefs> {
-  const raw = await chrome.storage.local.get(["dockHidden", "dockTop", "storageUsage"]);
+  const raw = await chrome.storage.local.get(["dockHidden", "dockTop", "storageUsage", "lastSwitch"]);
   return {
     dockHidden: raw.dockHidden === true,
     dockTop: typeof raw.dockTop === "number" ? raw.dockTop : DEFAULT_PREFS.dockTop,
     storageUsage: raw.storageUsage as Prefs["storageUsage"],
+    lastSwitch: raw.lastSwitch as Prefs["lastSwitch"],
   };
 }
 

@@ -1,7 +1,7 @@
 import { WA_URL, escapeHtml, getState, send } from "../shared/common";
 import { avatarHtml, paintAvatars, sheet } from "../shared/dom";
-import type { Account } from "../shared/types";
-import { clearLive, deleteSlot, restore, saveLive, setBlockedHandler } from "./vault";
+import type { Account, SwitchStats } from "../shared/types";
+import { type CopyCounter, clearLive, deleteSlot, restore, saveLive, setBlockedHandler } from "./vault";
 
 const CSS = `
 :root { color-scheme: light dark; --bg:#f0f2f5; --card:#ffffff; --fg:#111b21; --muted:#667781; --line:#e9edef; --accent:#00a884; --danger:#ea0038; }
@@ -87,43 +87,70 @@ export async function runOpPage(opId: string): Promise<void> {
   const ui = render(from, to, title);
 
   setBlockedHandler(async () => {
-    ui.status("Waiting for WhatsApp to release its storage…");
+    phase = "Waiting for WhatsApp to release its storage…";
     await send({ type: "unblock-storage" });
   });
 
+  const t0 = performance.now();
+  const stats: SwitchStats = { at: Date.now(), totalMs: 0, saveMs: 0, clearMs: 0, restoreMs: 0, savedRecords: 0, restoredRecords: 0 };
+  const saved: CopyCounter = { records: 0 };
+  const restored: CopyCounter = { records: 0 };
+  let phase = "Preparing…";
+  const fmt = new Intl.NumberFormat();
+  const ticker = window.setInterval(() => {
+    const n = phase.startsWith("Saving") ? saved.records : phase.startsWith("Restoring") ? restored.records : 0;
+    ui.status(n ? `${phase} ${fmt.format(n)} records` : phase);
+  }, 100);
+  const step = async <T>(label: string, fn: () => Promise<T>): Promise<[T, number]> => {
+    phase = label;
+    const s0 = performance.now();
+    const out = await fn();
+    return [out, Math.round(performance.now() - s0)];
+  };
+
   try {
-    // Ask Chrome not to evict this origin's storage under disk pressure:
-    // it now holds every saved account, not just a re-downloadable cache.
-    const persisted = await navigator.storage.persist().catch(() => false);
+    // Ask Chrome not to evict this origin's storage under disk pressure: it now
+    // holds every saved account, not just a re-downloadable cache. Not awaited
+    // up front – it doesn't need to block the switch.
+    const persisted = navigator.storage.persist().catch(() => false);
 
     // Re-read state on every attempt: a retry must not re-save a live session
     // that has already been saved and cleared (activeId is null by then).
-    let { activeId } = await getState();
+    const { activeId } = await getState();
     if (isSwitch) {
       if (activeId && !op.discardLive) {
-        await saveLive(activeId, ui.status);
+        [, stats.saveMs] = await step(`Saving ${from?.name ?? "current account"} ·`, () => saveLive(activeId, saved));
       }
       // From here on the live storage belongs to nobody.
       await send({ type: "op-progress", opId, activeId: null });
-      activeId = null;
 
-      await clearLive(ui.status);
+      [, stats.clearMs] = await step("Clearing…", clearLive);
       if (op.to) {
-        const restored = await restore(op.to, ui.status);
-        ui.status(restored ? "Session restored" : "New account — scan the QR code to link it");
+        const target = op.to;
+        [, stats.restoreMs] = await step(`Restoring ${to?.name ?? "account"} ·`, () => restore(target, restored));
       }
       await send({ type: "op-progress", opId, activeId: op.to });
     }
     for (const id of op.deleteSlots ?? []) {
-      ui.status("Removing saved session…");
+      phase = "Removing saved session…";
       await deleteSlot(id);
     }
-    const { usage = 0 } = await navigator.storage.estimate().catch(() => ({ usage: 0 }));
-    await send({ type: "storage-usage", bytes: usage, persisted }).catch(() => undefined);
-    await send({ type: "op-done", opId, ok: true });
+    stats.totalMs = Math.round(performance.now() - t0);
+    stats.savedRecords = saved.records;
+    stats.restoredRecords = restored.records;
+    console.info("[multi-whatsapp] switch", stats);
+    window.clearInterval(ticker);
     ui.status("Opening WhatsApp…");
+
+    // Bookkeeping doesn't need to delay WhatsApp's start.
+    void Promise.all([persisted, navigator.storage.estimate().catch(() => ({ usage: 0 }))]).then(([p, est]) =>
+      send({ type: "storage-usage", bytes: est.usage ?? 0, persisted: p }).catch(() => undefined),
+    );
+    if (isSwitch) void send({ type: "switch-stats", stats }).catch(() => undefined);
+    await send({ type: "op-done", opId, ok: true });
     location.replace(WA_URL);
   } catch (e) {
+    window.clearInterval(ticker);
     const msg = e instanceof Error ? e.message : String(e);
     console.error("[multi-whatsapp] switch failed", e);
     await send({ type: "op-done", opId, ok: false, error: msg }).catch(() => undefined);

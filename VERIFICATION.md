@@ -1,8 +1,8 @@
-# Verification — version 1.0.0
+# Verification — version 1.1.0
 
 Tested on 2026-11-16 with **Chrome/159.0.8154.6** (Chrome for Testing). The test loaded the actual unpacked `dist/` build into a separate, throwaway browser profile. Run it again with `bun run check`.
 
-## End-to-end (20/20)
+## End-to-end (21/21)
 
 - PASS: Manifest V3 extension loads and its service worker starts
 - PASS: Fresh install adopts the current session as “Account 1”
@@ -13,6 +13,7 @@ Tested on 2026-11-16 with **Chrome/159.0.8154.6** (Chrome for Testing). The test
 - PASS: Switch via popup number key restores account 2 completely
 - PASS: Switch succeeds when WhatsApp's service worker holds the database open
 - PASS: Changes made in an account are kept on the next switch
+- PASS: Incremental save keeps added, updated and deleted records exactly
 - PASS: Duplicate WhatsApp tabs are closed before a switch
 - PASS: Switching with no WhatsApp tab open opens one
 - PASS: State survives a service worker restart
@@ -25,10 +26,27 @@ Tested on 2026-11-16 with **Chrome/159.0.8154.6** (Chrome for Testing). The test
 - PASS: Switch page renders under strict CSP
 - PASS: No JavaScript errors in WhatsApp, popup or options pages
 
-## Unit (23/23)
+## Unit (58/58)
 
+- PASS: conservative equality `same()`: equal values match, different values never match (including ±0, holes, typed-array kind/offset, byte changes); uncomparable types always count as changed
 - PASS: initials, contrast colour, HTML escaping, byte and time formatting, phone formatting
 - PASS: generated icons are valid 16/32/48/128 px RGBA PNGs with transparent rounded corners
+
+## Performance (`bun run bench`, Chrome for Testing 159)
+
+The fixture accounts have about 82k records each. Record counts per store match a real account, and the fixture has the real index layout: 20 indexes on `message`, 6 on `contact`, 4 on `reactions`. Between switches, 300 messages and contacts change.
+
+| Build | Median switch (click → WhatsApp loaded) |
+|---|---|
+| 1.0.0 (full copy both ways) | 6.23 s |
+| 1.1.0 (incremental save) | 5.24 s |
+
+In 1.1.0 the save writes about 600 records instead of about 82,000, and restore remains a full write. The fixture's random payloads make reads about 2× more expensive than on real data, so this setup understates the gain.
+
+Measured on a real account (read-only probe into a temporary database, deleted afterwards): `model-storage` takes 0.2 s to read and 2.1 s to write. Writes cost about 10× more than reads because of index updates. Rejected alternatives:
+- Bigger or smaller chunks: no effect.
+- Building indexes after bulk insert: 5.2 s against 2.1 s.
+- Redirecting WhatsApp's `indexedDB` to per-account Storage Buckets: WhatsApp's 13 worker scripts would keep using the default storage, which risks mixing encryption state between accounts.
 
 ## Static checks
 

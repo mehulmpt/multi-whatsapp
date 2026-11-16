@@ -284,6 +284,8 @@ async function handle(req: Request): Promise<unknown> {
       return unblockStorage();
     case "storage-usage":
       return recordStorageUsage(req.bytes, req.persisted);
+    case "switch-stats":
+      return save({ lastSwitch: req.stats });
   }
 }
 

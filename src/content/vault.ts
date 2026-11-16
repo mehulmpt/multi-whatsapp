@@ -11,10 +11,15 @@
  * IndexedDB databases of the same origin but can never be exported elsewhere.
  */
 
+import { same } from "./same";
+
 const PREFIX = "mwa:";
 const META_DB = "mwa-vault";
 const META_STORE = "slots";
-const CHUNK = 500;
+/** Records per read/write transaction. */
+const CHUNK = 1000;
+/** Object stores copied concurrently (bounds memory: ~2 chunks in flight each). */
+const PARALLEL_STORES = 8;
 const BLOCKED_TIMEOUT_MS = 20_000;
 
 interface IndexSchema {
@@ -41,7 +46,10 @@ interface SlotMeta {
   localStorage: Record<string, string>;
 }
 
-export type Progress = (message: string) => void;
+/** Running count of records copied, for progress + stats. */
+export interface CopyCounter {
+  records: number;
+}
 
 // ---------------------------------------------------------------------------
 // Promise wrappers
@@ -147,38 +155,99 @@ async function createWithSchema(name: string, schema: DbSchema): Promise<IDBData
   });
 }
 
-async function copyStore(src: IDBDatabase, dst: IDBDatabase, store: StoreSchema): Promise<number> {
-  let lower: IDBValidKey | undefined;
-  let total = 0;
-  for (;;) {
-    const range = lower === undefined ? undefined : IDBKeyRange.lowerBound(lower, true);
-    const rtx = src.transaction(store.name, "readonly");
-    const os = rtx.objectStore(store.name);
-    // Both calls walk the same key order inside one transaction → aligned.
-    const [keys, values] = await Promise.all([req(os.getAllKeys(range, CHUNK)), req(os.getAll(range, CHUNK))]);
-    if (keys.length === 0) break;
+interface Chunk {
+  keys: IDBValidKey[];
+  values: unknown[];
+}
+const EMPTY: Chunk = { keys: [], values: [] };
 
-    const wtx = dst.transaction(store.name, "readwrite");
-    const ws = wtx.objectStore(store.name);
-    for (let i = 0; i < keys.length; i++) {
-      if (store.keyPath === null) ws.put(values[i], keys[i]);
-      else ws.put(values[i]);
-    }
-    await done(wtx);
+type RecordsStore = IDBObjectStore & {
+  getAllRecords?: (o: { query?: IDBKeyRange | null; count?: number }) => IDBRequest<{ key: IDBValidKey; value: unknown }[]>;
+};
 
-    total += keys.length;
-    lower = keys[keys.length - 1];
-    if (keys.length < CHUNK) break;
+/** Read up to CHUNK records after `after` (exclusive), in key order. */
+async function readChunk(db: IDBDatabase, store: string, after?: IDBValidKey): Promise<Chunk> {
+  const range = after === undefined ? null : IDBKeyRange.lowerBound(after, true);
+  const os = db.transaction(store, "readonly").objectStore(store) as RecordsStore;
+  if (typeof os.getAllRecords === "function") {
+    // Chrome 141+: keys and values in one pass.
+    const recs = await req(os.getAllRecords({ query: range, count: CHUNK }));
+    return { keys: recs.map((r) => r.key), values: recs.map((r) => r.value) };
   }
-  return total;
+  // Both calls walk the same key order inside one transaction → aligned.
+  const [keys, values] = await Promise.all([req(os.getAllKeys(range, CHUNK)), req(os.getAll(range, CHUNK))]);
+  return { keys, values };
 }
 
-async function copyDb(srcName: string, dstName: string, schema: DbSchema): Promise<void> {
+async function writeChunk(db: IDBDatabase, store: StoreSchema, chunk: Chunk, durability: IDBTransactionDurability): Promise<void> {
+  const tx = db.transaction(store.name, "readwrite", { durability });
+  const os = tx.objectStore(store.name);
+  for (let i = 0; i < chunk.keys.length; i++) {
+    if (store.keyPath === null) os.put(chunk.values[i], chunk.keys[i]);
+    else os.put(chunk.values[i]);
+  }
+  await done(tx);
+}
+
+/** Tiny semaphore so many stores can copy concurrently without unbounded memory. */
+function limiter(max: number) {
+  let active = 0;
+  const queue: (() => void)[] = [];
+  return async <T>(fn: () => Promise<T>): Promise<T> => {
+    if (active >= max) await new Promise<void>((r) => queue.push(r));
+    active++;
+    try {
+      return await fn();
+    } finally {
+      active--;
+      queue.shift()?.();
+    }
+  };
+}
+
+/**
+ * Copy one store, pipelined: while chunk N is being written to `dst`, chunk
+ * N+1 is already being read from `src`. Returns the last record written (used
+ * for the durability barrier).
+ */
+async function copyStore(
+  src: IDBDatabase,
+  dst: IDBDatabase,
+  store: StoreSchema,
+  counter: CopyCounter,
+): Promise<Chunk> {
+  let chunk = await readChunk(src, store.name);
+  let last = EMPTY;
+  while (chunk.keys.length > 0) {
+    const more = chunk.keys.length === CHUNK;
+    const [, next] = await Promise.all([
+      writeChunk(dst, store, chunk, "relaxed"),
+      more ? readChunk(src, store.name, chunk.keys[chunk.keys.length - 1]) : Promise.resolve(EMPTY),
+    ]);
+    counter.records += chunk.keys.length;
+    last = { keys: chunk.keys.slice(-1), values: chunk.values.slice(-1) };
+    chunk = next;
+  }
+  return last;
+}
+
+async function copyDb(
+  srcName: string,
+  dstName: string,
+  schema: DbSchema,
+  run: ReturnType<typeof limiter>,
+  counter: CopyCounter,
+): Promise<void> {
   const src = await open(srcName);
   try {
     const dst = await createWithSchema(dstName, schema);
     try {
-      for (const s of schema.stores) await copyStore(src, dst, s);
+      const lasts = await Promise.all(schema.stores.map((s) => run(() => copyStore(src, dst, s, counter))));
+      // Chunks were written with relaxed durability (no fsync each). Before the
+      // caller relies on this copy – e.g. deletes the source – force a durable
+      // commit by re-writing one record with strict durability.
+      const i = lasts.findIndex((c) => c.keys.length > 0);
+      if (i >= 0) await writeChunk(dst, schema.stores[i]!, lasts[i]!, "strict");
     } finally {
       dst.close();
     }
@@ -186,6 +255,129 @@ async function copyDb(srcName: string, dstName: string, schema: DbSchema): Promi
     src.close();
   }
 }
+
+// ---------------------------------------------------------------------------
+// Incremental sync (live → existing slot)
+// ---------------------------------------------------------------------------
+
+/** Forward-only, chunked, prefetching reader over a store in key order. */
+class RecordStream {
+  private chunk: Chunk = EMPTY;
+  private i = 0;
+  private exhausted = false;
+  private pending: Promise<Chunk> | null;
+
+  constructor(private db: IDBDatabase, private store: string) {
+    this.pending = readChunk(db, store);
+  }
+
+  /** Make sure the current record is buffered (or the stream is known to be done). */
+  async fill(): Promise<void> {
+    if (this.i < this.chunk.keys.length || this.exhausted) return;
+    if (this.pending === null) {
+      this.exhausted = true;
+      return;
+    }
+    this.chunk = await this.pending;
+    this.i = 0;
+    // A short chunk is the last one; otherwise prefetch the next while this one is consumed.
+    this.pending =
+      this.chunk.keys.length === CHUNK ? readChunk(this.db, this.store, this.chunk.keys[this.chunk.keys.length - 1]) : null;
+    if (this.chunk.keys.length === 0) this.exhausted = true;
+  }
+
+  /** Only meaningful right after fill(). */
+  get done(): boolean {
+    return this.i >= this.chunk.keys.length && (this.exhausted || this.pending === null);
+  }
+  get key(): IDBValidKey {
+    return this.chunk.keys[this.i]!;
+  }
+  get value(): unknown {
+    return this.chunk.values[this.i];
+  }
+  advance(): void {
+    this.i++;
+  }
+}
+
+type Op = { del: false; key: IDBValidKey; value: unknown } | { del: true; key: IDBValidKey };
+
+async function writeOps(db: IDBDatabase, store: StoreSchema, ops: Op[], durability: IDBTransactionDurability): Promise<void> {
+  const tx = db.transaction(store.name, "readwrite", { durability });
+  const os = tx.objectStore(store.name);
+  for (const op of ops) {
+    if (op.del) os.delete(op.key);
+    else if (store.keyPath === null) os.put(op.value, op.key);
+    else os.put(op.value);
+  }
+  await done(tx);
+}
+
+/**
+ * Make `dst` (a previous snapshot) identical to `src` (live) by merging both
+ * stores in key order and writing only the differences. Reads are ~4× cheaper
+ * than writes, and between switches only a small fraction of records change.
+ * Idempotent, so it also repairs a snapshot left half-written by a crash.
+ * Returns the last op written (for the durability barrier), or null.
+ */
+async function syncStore(src: IDBDatabase, dst: IDBDatabase, store: StoreSchema, counter: CopyCounter): Promise<Op | null> {
+  const a = new RecordStream(src, store.name);
+  const b = new RecordStream(dst, store.name);
+  let ops: Op[] = [];
+  let inflight: Promise<void> = Promise.resolve();
+  let last: Op | null = null;
+
+  const flush = async () => {
+    if (ops.length === 0) return;
+    const batch = ops;
+    ops = [];
+    last = batch[batch.length - 1]!;
+    counter.records += batch.length;
+    await inflight; // keep write order
+    inflight = writeOps(dst, store, batch, "relaxed");
+  };
+
+  for (;;) {
+    await Promise.all([a.fill(), b.fill()]);
+    if (a.done && b.done) break;
+    const c = a.done ? 1 : b.done ? -1 : indexedDB.cmp(a.key, b.key);
+    if (c < 0) {
+      ops.push({ del: false, key: a.key, value: a.value });
+      a.advance();
+    } else if (c > 0) {
+      ops.push({ del: true, key: b.key });
+      b.advance();
+    } else {
+      if (!same(a.value, b.value)) ops.push({ del: false, key: a.key, value: a.value });
+      a.advance();
+      b.advance();
+    }
+    if (ops.length >= CHUNK) await flush();
+  }
+  await flush();
+  await inflight;
+  return last;
+}
+
+async function syncDb(name: string, slotName: string, schema: DbSchema, run: ReturnType<typeof limiter>, counter: CopyCounter): Promise<void> {
+  const src = await open(name);
+  try {
+    const dst = await open(slotName);
+    try {
+      const lasts = await Promise.all(schema.stores.map((s) => run(() => syncStore(src, dst, s, counter))));
+      // Durability barrier, as in copyDb: re-apply one op with strict durability.
+      const i = lasts.findIndex((op) => op !== null);
+      if (i >= 0) await writeOps(dst, schema.stores[i]!, [lasts[i]!], "strict");
+    } finally {
+      dst.close();
+    }
+  } finally {
+    src.close();
+  }
+}
+
+const schemaKey = (s: DbSchema) => JSON.stringify([s.version, s.stores]);
 
 // ---------------------------------------------------------------------------
 // Live databases + slot metadata
@@ -233,45 +425,54 @@ function readLocalStorage(): Record<string, string> {
 // Public API
 // ---------------------------------------------------------------------------
 
-/** Snapshot the live session into the account's slot (replacing any older one). */
-export async function saveLive(accountId: string, progress: Progress): Promise<void> {
+/**
+ * Snapshot the live session into the account's slot. If the slot already has
+ * an earlier snapshot with the same schema, only the differences are written;
+ * otherwise the database is copied in full.
+ */
+export async function saveLive(accountId: string, counter: CopyCounter = { records: 0 }): Promise<void> {
   const names = await liveDbNames();
   const previous = await getMeta(accountId);
-  const schemas: DbSchema[] = [];
+  const existing = new Map((await indexedDB.databases()).map((d) => [d.name, d.version]));
+  const run = limiter(PARALLEL_STORES);
 
-  for (const name of names) {
-    progress(`Saving ${name}…`);
-    const db = await open(name);
-    const schema = readSchema(db);
-    db.close();
-    await copyDb(name, slotDbName(accountId, name), schema);
-    schemas.push(schema);
-  }
+  const schemas = await Promise.all(
+    names.map(async (name) => {
+      const db = await open(name);
+      const schema = readSchema(db);
+      db.close();
+      const slot = slotDbName(accountId, name);
+      const prev = previous?.dbs.find((d) => d.name === name);
+      if (prev && schemaKey(prev) === schemaKey(schema) && existing.get(slot) === schema.version) {
+        await syncDb(name, slot, schema, run, counter);
+      } else {
+        await copyDb(name, slot, schema, run, counter);
+      }
+      return schema;
+    }),
+  );
 
   // Drop slot databases that no longer exist live.
-  for (const old of previous?.dbs ?? []) {
-    if (!names.includes(old.name)) await deleteDb(slotDbName(accountId, old.name));
-  }
+  await Promise.all(
+    (previous?.dbs ?? []).filter((old) => !names.includes(old.name)).map((old) => deleteDb(slotDbName(accountId, old.name))),
+  );
 
   await putMeta({ accountId, savedAt: Date.now(), dbs: schemas, localStorage: readLocalStorage() });
 }
 
 /** Wipe WhatsApp's live storage so the page starts logged-out. */
-export async function clearLive(progress: Progress): Promise<void> {
-  progress("Clearing current session…");
-  for (const name of await liveDbNames()) await deleteDb(name);
+export async function clearLive(): Promise<void> {
+  await Promise.all((await liveDbNames()).map(deleteDb));
   localStorage.clear();
   sessionStorage.clear();
 }
 
 /** Restore an account's slot into live storage. Returns false if it has none. */
-export async function restore(accountId: string, progress: Progress): Promise<boolean> {
+export async function restore(accountId: string, counter: CopyCounter = { records: 0 }): Promise<boolean> {
   const meta = await getMeta(accountId);
   if (!meta) return false;
-  for (const schema of meta.dbs) {
-    progress(`Restoring ${schema.name}…`);
-    await copyDb(slotDbName(accountId, schema.name), schema.name, schema);
-  }
+  const run = limiter(PARALLEL_STORES);
+  await Promise.all(meta.dbs.map((schema) => copyDb(slotDbName(accountId, schema.name), schema.name, schema, run, counter)));
   for (const [k, v] of Object.entries(meta.localStorage)) localStorage.setItem(k, v);
   return true;
 }
@@ -284,6 +485,6 @@ export async function deleteSlot(accountId: string): Promise<void> {
     ...(meta?.dbs.map((d) => slotDbName(accountId, d.name)) ?? []),
     ...all.map((d) => d.name).filter((n): n is string => !!n?.startsWith(prefix)),
   ]);
-  for (const n of names) await deleteDb(n);
+  await Promise.all([...names].map(deleteDb));
   await delMeta(accountId);
 }
