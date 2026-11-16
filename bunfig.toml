@@ -1,0 +1,5 @@
+[install]
+# Pin exact versions when adding deps (no ^ or ~ ranges)
+exact = true
+# Supply-chain hygiene: refuse any package version published less than 7 days ago
+minimumReleaseAge = 604800 # seconds (7 days)

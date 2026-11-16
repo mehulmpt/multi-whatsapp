@@ -1,0 +1,25 @@
+{
+  "name": "multi-whatsapp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome extension to manage and quickly switch between multiple WhatsApp Web accounts.",
+  "type": "module",
+  "packageManager": "bun@1.4.4",
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "dev": "bun run scripts/build.ts --watch",
+    "typecheck": "tsc --noEmit",
+    "check": "bun run typecheck && bun run build",
+    "zip": "bun run scripts/build.ts && bun run scripts/zip.ts",
+    "clean": "rm -rf dist release"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "@types/chrome": "0.3.7",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}
